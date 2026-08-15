@@ -66,17 +66,6 @@ object History {
         prefs(c).edit().remove(KEY).apply()
     }
 
-    fun open(c: Context, uri: String, isAudio: Boolean): Boolean = try {
-        c.startActivity(
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(Uri.parse(uri), if (isAudio) "audio/mpeg" else "video/mp4")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-        )
-        true
-    } catch (e: Exception) { false }
-
     fun share(c: Context, uri: String, isAudio: Boolean): Boolean = try {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = if (isAudio) "audio/mpeg" else "video/mp4"
@@ -89,4 +78,21 @@ object History {
         )
         true
     } catch (e: Exception) { false }
+
+    fun openTelegram(c: Context, username: String) {
+        val clean = username.trimStart('@')
+        try {
+            c.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("tg://resolve?domain=$clean"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (e: Exception) {
+            try {
+                c.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/$clean"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (e2: Exception) { }
+        }
+    }
 }
