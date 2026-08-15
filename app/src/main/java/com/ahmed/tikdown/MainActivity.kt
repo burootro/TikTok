@@ -59,17 +59,20 @@ val BrandBrush = Brush.horizontalGradient(listOf(Pink, Cyan))
 class MainActivity : ComponentActivity() {
 
     private val incomingLink = mutableStateOf("")
+    private val openUpdate = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         readIntent(intent)
-        setContent { AppRoot(incomingLink) }
+        if (intent?.action == UpdateWorker.ACTION_OPEN_UPDATE) openUpdate.value = true
+        setContent { AppRoot(incomingLink, openUpdate) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         readIntent(intent)
+        if (intent.action == UpdateWorker.ACTION_OPEN_UPDATE) openUpdate.value = true
     }
 
     private fun readIntent(intent: Intent?) {
@@ -95,7 +98,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun AppRoot(incomingLink: MutableState<String>) {
+fun AppRoot(incomingLink: MutableState<String>, openUpdate: MutableState<Boolean>) {
     AppTheme {
         var showSplash by remember { mutableStateOf(true) }
         LaunchedEffect(Unit) {
@@ -115,6 +118,8 @@ fun AppRoot(incomingLink: MutableState<String>) {
             ) {
                 DownloaderScreen(incomingLink)
             }
+
+            if (!showSplash) UpdateGate(forceOpen = openUpdate.value)
         }
     }
 }
@@ -439,7 +444,6 @@ fun DownloaderScreen(incomingLink: MutableState<String>) {
                         .border(1.dp, Color(0xFF262633), RoundedCornerShape(20.dp))
                         .padding(14.dp)
                 ) {
-                    // معاينة صغيرة جنب البيانات
                     Row(verticalAlignment = Alignment.Top) {
                         AsyncImage(
                             model = v.cover,
