@@ -1,40 +1,152 @@
 package com.ahmed.tikdown
 
-import android.app.DownloadManager
+import android.content.ContentValues
 import android.content.Context
-import android.net.Uri
+import android.media.MediaScannerConnection
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
 
 object Downloader {
 
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
+
     private fun safeName(raw: String): String =
-        raw.replace(Regex("""[\\/:*?"<>|\n\r]"""), "_")
-            .trim()
-            .take(60)
+        raw.replace(Regex("""[\\/:*?"<>|\n\r\t]"""), "_")
+            .replace(Regex("\\s+"), "_")
+            .trim('_', '.')
+            .take(40)
             .ifBlank { "tiktok" }
 
-    fun enqueue(
+    /**
+     * بينزّل الملف بنفسه ويسجّله في مكتبة الميديا بتاعة الجهاز
+     * عشان يبان في المعرض على طول.
+     */
+    suspend fun download(
         context: Context,
         url: String,
         author: String,
         id: String,
-        isAudio: Boolean = false
-    ): Long {
+        isAudio: Boolean = false,
+        onProgress: (Float) -> Unit = {}
+    ): Result<String> = withContext(Dispatchers.IO) {
+
         val ext = if (isAudio) "mp3" else "mp4"
-        val fileName = "${safeName(author)}_${safeName(id)}.$ext"
-        val dir = if (isAudio) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_MOVIES
+        val stamp = System.currentTimeMillis() % 100000
+        val fileName = "${safeName(author)}_${safeName(id)}_$stamp.$ext"
+        val mime = if (isAudio) "audio/mpeg" else "video/mp4"
+        val folder = if (isAudio) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_MOVIES
 
-        val request = DownloadManager.Request(Uri.parse(url))
-            .setTitle(fileName)
-            .setDescription("جاري التحميل من TikDown")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalPublicDir(dir, "TikDown/$fileName")
-            .addRequestHeader("User-Agent", "Mozilla/5.0 (Linux; Android 13)")
-            .addRequestHeader("Referer", "https://www.tiktok.com/")
-            .setAllowedOverMetered(true)
-            .setAllowedOverRoaming(true)
+        try {
+            val req = Request.Builder()
+                .url(url)
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                )
+                .header("Referer", "https://www.tiktok.com/")
+                .build()
 
-        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        return dm.enqueue(request)
+            client.newCall(req).execute().use { res ->
+                if (!res.isSuccessful) {
+                    return@withContext Result.failure(Exception("السيرفر رفض التحميل (${res.code})"))
+                }
+                val body = res.body
+                    ?: return@withContext Result.failure(Exception("مفيش بيانات في الرد"))
+
+                val total = body.contentLength()
+                var written = 0L
+                val buf = ByteArray(64 * 1024)
+
+                if (Build.VERSION.SDK_INT >= 29) {
+                    val resolver = context.contentResolver
+                    val collection = if (isAudio)
+                        MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    else
+                        MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+
+                    val values = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                        put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, "$folder/TikDown")
+                        put(MediaStore.MediaColumns.IS_PENDING, 1)
+                    }
+
+                    val uri = resolver.insert(collection, values)
+                        ?: return@withContext Result.failure(Exception("مقدرتش أنشئ الملف على التخزين"))
+
+                    val out = resolver.openOutputStream(uri)
+                        ?: return@withContext Result.failure(Exception("مقدرتش أفتح الملف للكتابة"))
+
+                    out.use { stream ->
+                        body.byteStream().use { input ->
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n == -1) break
+                                stream.write(buf, 0, n)
+                                written += n
+                                if (total > 0) onProgress(written.toFloat() / total)
+                            }
+                            stream.flush()
+                        }
+                    }
+
+                    if (written == 0L) {
+                        resolver.delete(uri, null, null)
+                        return@withContext Result.failure(Exception("الملف نزل فاضي، جرّب تاني"))
+                    }
+
+                    values.clear()
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+
+                    onProgress(1f)
+                    Result.success("$folder/TikDown")
+                } else {
+                    val dir = File(Environment.getExternalStoragePublicDirectory(folder), "TikDown")
+                    if (!dir.exists()) dir.mkdirs()
+                    val file = File(dir, fileName)
+
+                    FileOutputStream(file).use { stream ->
+                        body.byteStream().use { input ->
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n == -1) break
+                                stream.write(buf, 0, n)
+                                written += n
+                                if (total > 0) onProgress(written.toFloat() / total)
+                            }
+                            stream.flush()
+                        }
+                    }
+
+                    if (written == 0L) {
+                        file.delete()
+                        return@withContext Result.failure(Exception("الملف نزل فاضي، جرّب تاني"))
+                    }
+
+                    MediaScannerConnection.scanFile(
+                        context, arrayOf(file.absolutePath), arrayOf(mime), null
+                    )
+                    onProgress(1f)
+                    Result.success(dir.absolutePath)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception(e.message ?: "فشل التحميل، اتأكد من النت"))
+        }
     }
 }
