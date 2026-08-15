@@ -24,7 +24,10 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 @Composable
-fun UpdateGate(forceOpen: Boolean = false) {
+fun UpdateGate(
+    forceOpen: Boolean = false,
+    manualCheck: MutableState<Boolean>
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -39,15 +42,31 @@ fun UpdateGate(forceOpen: Boolean = false) {
         UpdateWorker.schedule(context)
         delay(2200)
         Updater.fetchLatest().onSuccess { r ->
-            if (Updater.isNewer(r.version, Updater.currentVersion(context))) {
-                release = r
-                visible = true
-            }
+            release = r
+            if (Updater.isNewer(r.version, Updater.currentVersion(context))) visible = true
         }
     }
 
     LaunchedEffect(forceOpen) {
         if (forceOpen && release != null) visible = true
+    }
+
+    LaunchedEffect(manualCheck.value) {
+        if (!manualCheck.value) return@LaunchedEffect
+        Toast.makeText(context, "بفحص التحديثات...", Toast.LENGTH_SHORT).show()
+        Updater.fetchLatest()
+            .onSuccess { r ->
+                release = r
+                if (Updater.isNewer(r.version, Updater.currentVersion(context))) {
+                    visible = true
+                } else {
+                    Toast.makeText(context, "أنت على أحدث إصدار ✅", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .onFailure {
+                Toast.makeText(context, it.message ?: "فشل الفحص", Toast.LENGTH_SHORT).show()
+            }
+        manualCheck.value = false
     }
 
     val r = release
@@ -69,11 +88,7 @@ fun UpdateGate(forceOpen: Boolean = false) {
                 style = TextStyle(brush = BrandBrush)
             )
             Spacer(Modifier.height(6.dp))
-            Text(
-                "الإصدار ${r.version}  ·  ${r.sizeMb} ميجا",
-                fontSize = 12.sp,
-                color = Cyan
-            )
+            Text("الإصدار ${r.version}  ·  ${r.sizeMb} ميجا", fontSize = 12.sp, color = Cyan)
 
             Spacer(Modifier.height(14.dp))
             Box(
