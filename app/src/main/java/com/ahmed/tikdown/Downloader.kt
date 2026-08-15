@@ -3,9 +3,11 @@ package com.ahmed.tikdown
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -13,6 +15,12 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
+
+data class SavedFile(
+    val uri: Uri,
+    val name: String,
+    val folder: String
+)
 
 object Downloader {
 
@@ -31,10 +39,6 @@ object Downloader {
             .take(40)
             .ifBlank { "tiktok" }
 
-    /**
-     * بينزّل الملف بنفسه ويسجّله في مكتبة الميديا بتاعة الجهاز
-     * عشان يبان في المعرض على طول.
-     */
     suspend fun download(
         context: Context,
         url: String,
@@ -42,7 +46,7 @@ object Downloader {
         id: String,
         isAudio: Boolean = false,
         onProgress: (Float) -> Unit = {}
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<SavedFile> = withContext(Dispatchers.IO) {
 
         val ext = if (isAudio) "mp3" else "mp4"
         val stamp = System.currentTimeMillis() % 100000
@@ -114,7 +118,7 @@ object Downloader {
                     resolver.update(uri, values, null, null)
 
                     onProgress(1f)
-                    Result.success("$folder/TikDown")
+                    Result.success(SavedFile(uri, fileName, "$folder/TikDown"))
                 } else {
                     val dir = File(Environment.getExternalStoragePublicDirectory(folder), "TikDown")
                     if (!dir.exists()) dir.mkdirs()
@@ -141,8 +145,11 @@ object Downloader {
                     MediaScannerConnection.scanFile(
                         context, arrayOf(file.absolutePath), arrayOf(mime), null
                     )
+                    val uri = FileProvider.getUriForFile(
+                        context, "${context.packageName}.fileprovider", file
+                    )
                     onProgress(1f)
-                    Result.success(dir.absolutePath)
+                    Result.success(SavedFile(uri, fileName, "$folder/TikDown"))
                 }
             }
         } catch (e: Exception) {
