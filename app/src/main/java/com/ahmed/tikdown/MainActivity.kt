@@ -82,7 +82,8 @@ class MainActivity : ComponentActivity() {
     private fun readIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
-            TikTokRepo.extractUrl(text)?.let { incomingLink.value = it }
+            val found = TikTokRepo.extractUrl(text)
+            if (found != null) incomingLink.value = found
         }
     }
 }
@@ -134,7 +135,8 @@ fun AppRoot(incomingLink: MutableState<String>, openUpdate: MutableState<Boolean
 fun AnimatedGlow() {
     val t = rememberInfiniteTransition(label = "glow")
     val p by t.animateFloat(
-        initialValue = 0f, targetValue = 1f,
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(6000, easing = LinearEasing), RepeatMode.Reverse),
         label = "p"
     )
@@ -174,7 +176,8 @@ fun SplashScreen() {
     )
     val pulse = rememberInfiniteTransition(label = "pulse")
     val halo by pulse.animateFloat(
-        0.30f, 0.75f,
+        0.30f,
+        0.75f,
         infiniteRepeatable(tween(1300, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "halo"
     )
@@ -204,7 +207,7 @@ fun SplashScreen() {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "by $DEV_NAME",
+                "by " + DEV_NAME,
                 fontSize = 13.sp,
                 color = Color(0xFF8A8A99),
                 modifier = Modifier.alpha(fade)
@@ -262,7 +265,8 @@ fun GradientButton(
 fun LoadingPulse() {
     val t = rememberInfiniteTransition(label = "load")
     val s by t.animateFloat(
-        0.82f, 1.12f,
+        0.82f,
+        1.12f,
         infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "s"
     )
@@ -287,21 +291,21 @@ fun LoadingPulse() {
 fun DrawerRow(
     title: String,
     subtitle: String,
-    accent: Color = Cyan,
-    onClick: (() -> Unit)? = null
+    accent: Color,
+    onClick: () -> Unit
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .clickable { onClick() }
             .background(Color(0xFF12121A))
             .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier
-                .size(4.dp, 30.dp)
+                .size(width = 4.dp, height = 30.dp)
                 .clip(RoundedCornerShape(50))
                 .background(accent)
         )
@@ -322,6 +326,7 @@ fun SideDrawer(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    val historyLabel = if (historyCount > 0) "سجل التحميلات (" + historyCount + ")" else "سجل التحميلات"
 
     ModalDrawerSheet(
         drawerContainerColor = CardBg,
@@ -346,21 +351,16 @@ fun SideDrawer(
                         fontWeight = FontWeight.Black,
                         style = TextStyle(brush = BrandBrush)
                     )
-                    Text("by $DEV_NAME", fontSize = 11.sp, color = Color(0xFF6A6A7A))
+                    Text("by " + DEV_NAME, fontSize = 11.sp, color = Color(0xFF6A6A7A))
                 }
             }
 
             Spacer(Modifier.height(24.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(Color(0xFF262633))
-            )
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF262633)))
             Spacer(Modifier.height(18.dp))
 
             DrawerRow(
-                title = if (historyCount > 0) "سجل التحميلات ($historyCount)" else "سجل التحميلات",
+                title = historyLabel,
                 subtitle = "كل الفيديوهات اللي نزّلتها",
                 accent = Pink
             ) {
@@ -383,7 +383,7 @@ fun SideDrawer(
 
             DrawerRow(
                 title = "تواصل معنا",
-                subtitle = "تليجرام $TELEGRAM",
+                subtitle = "تليجرام " + TELEGRAM,
                 accent = Color(0xFF2AABEE)
             ) {
                 History.openTelegram(context, TELEGRAM)
@@ -395,7 +395,7 @@ fun SideDrawer(
                 title = "الإصدار " + Updater.currentVersion(context),
                 subtitle = "TikDown · جميع الحقوق محفوظة",
                 accent = Color(0xFF44444F)
-            )
+            ) { }
 
             Spacer(Modifier.height(16.dp))
         }
@@ -409,8 +409,8 @@ fun HistoryDialog(
     onPlay: (String, String) -> Unit
 ) {
     val context = LocalContext.current
-    var items by remember { mutableStateOf(History.load(context)) }
-    val count = items.size
+    val itemsState = remember { mutableStateOf(History.load(context)) }
+    val list = itemsState.value
 
     Dialog(onDismissRequest = onClose) {
         Column(
@@ -433,12 +433,12 @@ fun HistoryDialog(
                     fontWeight = FontWeight.Black,
                     style = TextStyle(brush = BrandBrush)
                 )
-                Text(count.toString(), fontSize = 13.sp, color = Color(0xFF6A6A7A))
+                Text(list.size.toString(), fontSize = 13.sp, color = Color(0xFF6A6A7A))
             }
 
             Spacer(Modifier.height(14.dp))
 
-            if (items.isEmpty()) {
+            if (list.isEmpty()) {
                 Box(
                     Modifier.fillMaxWidth().height(160.dp),
                     contentAlignment = Alignment.Center
@@ -450,7 +450,7 @@ fun HistoryDialog(
                     modifier = Modifier.weight(1f, fill = false),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(items, key = { it.id }) { h ->
+                    items(list, key = { it.id }) { h ->
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -516,7 +516,7 @@ fun HistoryDialog(
                                     modifier = Modifier
                                         .clickable {
                                             History.remove(context, h.id)
-                                            items = History.load(context)
+                                            itemsState.value = History.load(context)
                                             onChanged()
                                         }
                                         .padding(4.dp)
@@ -530,7 +530,7 @@ fun HistoryDialog(
             Spacer(Modifier.height(14.dp))
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                if (items.isNotEmpty()) {
+                if (list.isNotEmpty()) {
                     GradientButton(
                         text = "مسح الكل",
                         filled = false,
@@ -538,7 +538,7 @@ fun HistoryDialog(
                         modifier = Modifier.weight(1f)
                     ) {
                         History.clear(context)
-                        items = emptyList()
+                        itemsState.value = History.load(context)
                         onChanged()
                     }
                 }
@@ -552,7 +552,6 @@ fun HistoryDialog(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScaffold(
     incomingLink: MutableState<String>,
@@ -562,4 +561,423 @@ fun MainScaffold(
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
 
-    var showHistory by remember { mutable
+    val showHistory = remember { mutableStateOf(false) }
+    val historyCount = remember { mutableStateOf(History.load(context).size) }
+    val playerUrl = remember { mutableStateOf("") }
+    val playerTitle = remember { mutableStateOf("") }
+
+    if (showHistory.value) {
+        HistoryDialog(
+            onClose = { showHistory.value = false },
+            onChanged = { historyCount.value = History.load(context).size },
+            onPlay = { u, t ->
+                playerUrl.value = u
+                playerTitle.value = t
+            }
+        )
+    }
+
+    if (playerUrl.value.isNotBlank()) {
+        VideoPlayerDialog(
+            url = playerUrl.value,
+            title = playerTitle.value
+        ) { playerUrl.value = "" }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        scrimColor = Color(0xCC000000),
+        drawerContent = {
+            SideDrawer(
+                historyCount = historyCount.value,
+                onHistory = { showHistory.value = true },
+                onCheckUpdate = { manualCheck.value = true },
+                onClose = { scope.launch { drawerState.close() } }
+            )
+        }
+    ) {
+        DownloaderScreen(
+            incomingLink = incomingLink,
+            onMenu = { scope.launch { drawerState.open() } },
+            onHistoryChanged = { historyCount.value = History.load(context).size },
+            onPlay = { u, t ->
+                playerUrl.value = u
+                playerTitle.value = t
+            }
+        )
+    }
+}
+
+@Composable
+fun DownloaderScreen(
+    incomingLink: MutableState<String>,
+    onMenu: () -> Unit,
+    onHistoryChanged: () -> Unit,
+    onPlay: (String, String) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var link by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    var downloading by remember { mutableStateOf(false) }
+    var progress by remember { mutableFloatStateOf(0f) }
+    var savedIsAudio by remember { mutableStateOf(false) }
+    var savedUri by remember { mutableStateOf("") }
+    var savedFolder by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf("") }
+
+    val infoState: MutableState<VideoInfo?> = remember { mutableStateOf(null) }
+
+    val notifPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    val storagePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (Build.VERSION.SDK_INT <= 28) {
+            storagePermission.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+    }
+
+    fun load(url: String) {
+        if (url.isBlank()) return
+        scope.launch {
+            loading = true
+            errorText = ""
+            infoState.value = null
+            savedUri = ""
+            TikTokRepo.fetch(url)
+                .onSuccess { infoState.value = it }
+                .onFailure { errorText = it.message ?: "حصل خطأ" }
+            loading = false
+        }
+    }
+
+    fun startDownload(v: VideoInfo, url: String, idSuffix: String, isAudio: Boolean) {
+        if (downloading) return
+        scope.launch {
+            downloading = true
+            progress = 0f
+            savedUri = ""
+            errorText = ""
+            Downloader.download(context, url, v.author, v.id + idSuffix, isAudio) { p ->
+                progress = p
+            }
+                .onSuccess { sf ->
+                    savedUri = sf.uri.toString()
+                    savedFolder = sf.folder
+                    savedIsAudio = isAudio
+                    History.add(
+                        context,
+                        HistoryItem(
+                            id = v.id + idSuffix + "-" + System.currentTimeMillis(),
+                            title = v.title,
+                            author = v.author,
+                            cover = v.cover,
+                            uri = sf.uri.toString(),
+                            isAudio = isAudio,
+                            time = System.currentTimeMillis()
+                        )
+                    )
+                    onHistoryChanged()
+                    Toast.makeText(context, "اتحفظ في " + sf.folder + " ✅", Toast.LENGTH_SHORT).show()
+                }
+                .onFailure { errorText = it.message ?: "فشل التحميل" }
+            downloading = false
+        }
+    }
+
+    LaunchedEffect(incomingLink.value) {
+        if (incomingLink.value.isNotBlank()) {
+            link = incomingLink.value
+            load(link)
+            incomingLink.value = ""
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 18.dp)
+            .padding(top = 30.dp, bottom = 32.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF2C2C38), RoundedCornerShape(12.dp))
+                    .clickable { onMenu() },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    repeat(3) {
+                        Box(
+                            Modifier
+                                .size(width = 17.dp, height = 2.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(Cyan)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = painterResource(R.drawable.ic_logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(34.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "TikDown",
+                    fontSize = 23.sp,
+                    fontWeight = FontWeight.Black,
+                    style = TextStyle(brush = BrandBrush)
+                )
+            }
+
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(42.dp))
+        }
+
+        Spacer(Modifier.height(22.dp))
+
+        OutlinedTextField(
+            value = link,
+            onValueChange = { link = it },
+            label = { Text("الصق رابط التيك توك هنا") },
+            singleLine = false,
+            maxLines = 3,
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Pink,
+                unfocusedBorderColor = Color(0xFF2C2C38),
+                focusedLabelColor = Cyan,
+                cursorColor = Pink,
+                focusedContainerColor = Color(0xFF12121A),
+                unfocusedContainerColor = Color(0xFF12121A)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(14.dp))
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            GradientButton(text = "لصق", filled = false, modifier = Modifier.weight(1f)) {
+                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val txt = cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
+                val found = TikTokRepo.extractUrl(txt)
+                if (found != null) {
+                    link = found
+                    load(found)
+                } else {
+                    Toast.makeText(context, "مفيش رابط في الكليب بورد", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            GradientButton(
+                text = if (loading) "..." else "جلب الفيديو",
+                enabled = !loading && link.isNotBlank(),
+                modifier = Modifier.weight(1.6f)
+            ) { load(link) }
+        }
+
+        Spacer(Modifier.height(22.dp))
+
+        AnimatedVisibility(visible = loading, enter = fadeIn(), exit = fadeOut()) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                LoadingPulse()
+            }
+        }
+
+        AnimatedVisibility(
+            visible = errorText.isNotBlank(),
+            enter = fadeIn(tween(300)) + scaleIn(initialScale = 0.94f),
+            exit = fadeOut()
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF33131F))
+                    .border(1.dp, Color(0xFF5C1E2E), RoundedCornerShape(14.dp))
+                    .padding(16.dp)
+            ) {
+                Text(errorText, color = Color(0xFFFF8FA3), fontSize = 13.sp)
+            }
+        }
+
+        val v = infoState.value
+
+        AnimatedVisibility(
+            visible = v != null,
+            enter = fadeIn(tween(450)) +
+                    slideInVertically(tween(450)) { it / 5 } +
+                    scaleIn(tween(450), initialScale = 0.93f),
+            exit = fadeOut()
+        ) {
+            if (v != null) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(CardBg)
+                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(20.dp))
+                        .padding(14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Box(contentAlignment = Alignment.Center) {
+                            AsyncImage(
+                                model = v.cover,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(width = 78.dp, height = 104.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onPlay(v.urlNoWatermark, v.title) }
+                            )
+                            Box(
+                                Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xCC000000)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("▶", fontSize = 13.sp, color = Color.White)
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "@" + v.author,
+                                color = Cyan,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                v.title,
+                                fontSize = 12.sp,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                                color = Color(0xFFCFCFDA),
+                                lineHeight = 17.sp
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                v.durationSec.toString() + " ثانية",
+                                fontSize = 11.sp,
+                                color = Color(0xFF6A6A7A)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    GradientButton(
+                        text = "▶  معاينة قبل التحميل",
+                        filled = false,
+                        small = true,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { onPlay(v.urlNoWatermark, v.title) }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    val percent = (progress * 100).toInt()
+
+                    if (downloading) {
+                        Text("جاري التحميل  " + percent + "%", fontSize = 12.sp, color = Cyan)
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(50)),
+                            color = Pink,
+                            trackColor = Color(0xFF23232E)
+                        )
+                    } else if (savedUri.isNotBlank()) {
+                        Text(
+                            "✅ اتحفظ في " + savedFolder,
+                            fontSize = 11.sp,
+                            color = Color(0xFF6BD98F)
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                        ) {
+                            GradientButton(
+                                text = "تشغيل",
+                                small = true,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (savedIsAudio) {
+                                    History.share(context, savedUri, true)
+                                } else {
+                                    onPlay(savedUri, v.title)
+                                }
+                            }
+                            GradientButton(
+                                text = "مشاركة",
+                                filled = false,
+                                small = true,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                History.share(context, savedUri, savedIsAudio)
+                            }
+                        }
+                        Spacer(Modifier.height(9.dp))
+                        GradientButton(
+                            text = "تحميل نسخة تانية",
+                            filled = false,
+                            small = true,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { savedUri = "" }
+                    } else {
+                        GradientButton(
+                            text = "تحميل بدون علامة مائية",
+                            modifier = Modifier.fillMaxWidth()
+                        ) { startDownload(v, v.urlNoWatermark, "", false) }
+
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 9.dp),
+                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                        ) {
+                            val hd = v.urlHd
+                            if (hd != null) {
+                                GradientButton(
+                                    text = "HD",
+                                    filled = false,
+                                    small = true,
+                                    modifier = Modifier.weight(1f)
+                                ) { startDownload(v, hd, "_HD", false) }
+                            }
+                            val mp3 = v.urlMusic
+                            if (mp3 != null) {
+                                GradientButton(
+                                    text = "صوت MP3",
+                                    filled = false,
+                                    small = true,
+                                    modifier = Modifier.weight(1f)
+                                ) { startDownload(v, mp3, "_audio", true) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
