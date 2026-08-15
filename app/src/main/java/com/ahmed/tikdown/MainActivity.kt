@@ -10,23 +10,54 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+// ====== غيّر اسمك من هنا بس ======
+const val DEV_NAME = "AHMED"
+const val APP_VERSION = "1.0"
+// =================================
+
+val Pink = Color(0xFFFF2D55)
+val Cyan = Color(0xFF25F4EE)
+val BgDark = Color(0xFF0B0B0F)
+val CardBg = Color(0xFF15151D)
+val BrandBrush = Brush.horizontalGradient(listOf(Pink, Cyan))
 
 class MainActivity : ComponentActivity() {
 
@@ -35,9 +66,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         readIntent(intent)
-        setContent {
-            AppTheme { DownloaderScreen(incomingLink) }
-        }
+        setContent { AppRoot(incomingLink) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -57,15 +86,193 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
     val scheme = darkColorScheme(
-        primary = Color(0xFFFE2C55),
+        primary = Pink,
         onPrimary = Color.White,
-        secondary = Color(0xFF25F4EE),
-        background = Color(0xFF0B0B0F),
-        surface = Color(0xFF17171D),
+        secondary = Cyan,
+        background = BgDark,
+        surface = CardBg,
         onBackground = Color(0xFFEDEDED),
         onSurface = Color(0xFFEDEDED)
     )
     MaterialTheme(colorScheme = scheme, content = content)
+}
+
+@Composable
+fun AppRoot(incomingLink: MutableState<String>) {
+    AppTheme {
+        var showSplash by remember { mutableStateOf(true) }
+        LaunchedEffect(Unit) {
+            delay(1900)
+            showSplash = false
+        }
+
+        Box(Modifier.fillMaxSize().background(BgDark)) {
+            AnimatedGlow()
+
+            AnimatedVisibility(visible = showSplash, exit = fadeOut(tween(500))) {
+                SplashScreen()
+            }
+            AnimatedVisibility(
+                visible = !showSplash,
+                enter = fadeIn(tween(600)) + slideInVertically(tween(600)) { it / 8 }
+            ) {
+                DownloaderScreen(incomingLink)
+            }
+        }
+    }
+}
+
+/** هالة لونية بتتنفّس في خلفية التطبيق */
+@Composable
+fun AnimatedGlow() {
+    val t = rememberInfiniteTransition(label = "glow")
+    val p by t.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(6000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "p"
+    )
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .size(340.dp)
+                .offset(x = (-90).dp, y = (40 + p * 60).dp)
+                .alpha(0.28f)
+                .background(Brush.radialGradient(listOf(Pink, Color.Transparent)), CircleShape)
+        )
+        Box(
+            Modifier
+                .size(300.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 80.dp, y = (-40 - p * 60).dp)
+                .alpha(0.20f)
+                .background(Brush.radialGradient(listOf(Cyan, Color.Transparent)), CircleShape)
+        )
+    }
+}
+
+@Composable
+fun SplashScreen() {
+    var start by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { start = true }
+
+    val scale by animateFloatAsState(
+        targetValue = if (start) 1f else 0.4f,
+        animationSpec = spring(dampingRatio = 0.42f, stiffness = Spring.StiffnessLow),
+        label = "scale"
+    )
+    val fade by animateFloatAsState(
+        targetValue = if (start) 1f else 0f,
+        animationSpec = tween(900, delayMillis = 250),
+        label = "fade"
+    )
+    val pulse = rememberInfiniteTransition(label = "pulse")
+    val halo by pulse.animateFloat(
+        0.30f, 0.75f,
+        infiniteRepeatable(tween(1300, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "halo"
+    )
+
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .size(210.dp)
+                        .alpha(halo * 0.45f)
+                        .background(Brush.radialGradient(listOf(Pink, Color.Transparent)), CircleShape)
+                )
+                Image(
+                    painter = painterResource(R.drawable.ic_logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(120.dp).scale(scale)
+                )
+            }
+            Spacer(Modifier.height(20.dp))
+            Text(
+                "TikDown",
+                fontSize = 36.sp,
+                fontWeight = FontWeight.Black,
+                style = TextStyle(brush = BrandBrush),
+                modifier = Modifier.alpha(fade)
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "by $DEV_NAME",
+                fontSize = 13.sp,
+                color = Color(0xFF8A8A99),
+                modifier = Modifier.alpha(fade)
+            )
+        }
+    }
+}
+
+@Composable
+fun GradientButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    filled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.955f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "press"
+    )
+
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(16.dp))
+            .then(
+                if (filled && enabled) Modifier.background(BrandBrush)
+                else Modifier
+                    .background(Color(0xFF16161E))
+                    .border(1.dp, Color(0xFF33333F), RoundedCornerShape(16.dp))
+            )
+            .alpha(if (enabled) 1f else 0.45f)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled
+            ) { onClick() }
+            .padding(vertical = 15.dp, horizontal = 22.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text,
+            color = if (filled) Color.White else Cyan,
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp
+        )
+    }
+}
+
+@Composable
+fun LoadingPulse() {
+    val t = rememberInfiniteTransition(label = "load")
+    val s by t.animateFloat(
+        0.82f, 1.12f,
+        infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "s"
+    )
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Image(
+            painter = painterResource(R.drawable.ic_logo),
+            contentDescription = null,
+            modifier = Modifier.size(58.dp).scale(s)
+        )
+        Spacer(Modifier.height(12.dp))
+        Text("بجيب الفيديو...", color = Color(0xFF9A9AAB), fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth(0.6f).clip(RoundedCornerShape(50)),
+            color = Pink,
+            trackColor = Color(0xFF23232E)
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -107,138 +314,207 @@ fun DownloaderScreen(incomingLink: MutableState<String>) {
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text("TikDown", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.primary
-                )
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 18.dp)
+            .padding(top = 40.dp, bottom = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // الهيدر
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                painter = painterResource(R.drawable.ic_logo),
+                contentDescription = null,
+                modifier = Modifier.size(42.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "TikDown",
+                fontSize = 27.sp,
+                fontWeight = FontWeight.Black,
+                style = TextStyle(brush = BrandBrush)
             )
         }
-    ) { pad ->
-        Column(
-            modifier = Modifier
-                .padding(pad)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "حمّل أي فيديو بدون علامة مائية",
+            fontSize = 12.sp,
+            color = Color(0xFF77778A)
+        )
+
+        Spacer(Modifier.height(28.dp))
+
+        OutlinedTextField(
+            value = link,
+            onValueChange = { link = it },
+            label = { Text("الصق رابط التيك توك هنا") },
+            singleLine = false,
+            maxLines = 3,
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Pink,
+                unfocusedBorderColor = Color(0xFF2C2C38),
+                focusedLabelColor = Cyan,
+                cursorColor = Pink,
+                focusedContainerColor = Color(0xFF12121A),
+                unfocusedContainerColor = Color(0xFF12121A)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(14.dp))
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            OutlinedTextField(
-                value = link,
-                onValueChange = { link = it },
-                label = { Text("الصق رابط التيك توك هنا") },
-                singleLine = false,
-                maxLines = 3,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp)
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val txt = cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
-                        val found = TikTokRepo.extractUrl(txt)
-                        if (found != null) { link = found; load(found) }
-                        else Toast.makeText(context, "مفيش رابط في الكليب بورد", Toast.LENGTH_SHORT).show()
-                    }
-                ) { Text("لصق") }
-
-                Button(
-                    onClick = { load(link) },
-                    enabled = !loading && link.isNotBlank()
-                ) { Text(if (loading) "جاري الجلب..." else "جلب الفيديو") }
+            GradientButton(
+                text = "لصق",
+                filled = false,
+                modifier = Modifier.weight(1f)
+            ) {
+                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val txt = cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
+                val found = TikTokRepo.extractUrl(txt)
+                if (found != null) { link = found; load(found) }
+                else Toast.makeText(context, "مفيش رابط في الكليب بورد", Toast.LENGTH_SHORT).show()
             }
 
-            Spacer(Modifier.height(20.dp))
+            GradientButton(
+                text = if (loading) "..." else "جلب الفيديو",
+                enabled = !loading && link.isNotBlank(),
+                modifier = Modifier.weight(1.6f)
+            ) { load(link) }
+        }
 
-            if (loading) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(26.dp))
+
+        AnimatedVisibility(visible = loading, enter = fadeIn(), exit = fadeOut()) {
+            LoadingPulse()
+        }
+
+        AnimatedVisibility(
+            visible = error != null,
+            enter = fadeIn(tween(300)) + scaleIn(initialScale = 0.94f),
+            exit = fadeOut()
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF33131F))
+                    .border(1.dp, Color(0xFF5C1E2E), RoundedCornerShape(14.dp))
+                    .padding(16.dp)
+            ) {
+                Text(error ?: "", color = Color(0xFFFF8FA3), fontSize = 14.sp)
             }
+        }
 
-            error?.let {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF3A1620)),
-                    modifier = Modifier.fillMaxWidth()
+        val v = info
+        AnimatedVisibility(
+            visible = v != null,
+            enter = fadeIn(tween(450)) +
+                    slideInVertically(tween(450)) { it / 5 } +
+                    scaleIn(tween(450), initialScale = 0.93f),
+            exit = fadeOut()
+        ) {
+            if (v != null) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(CardBg)
+                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(22.dp))
+                        .padding(16.dp)
                 ) {
+                    AsyncImage(
+                        model = v.cover,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(230.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("@${v.author}", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(5.dp))
+                    Text(v.title, fontSize = 14.sp, maxLines = 3, color = Color(0xFFDDDDE6))
+                    Spacer(Modifier.height(6.dp))
+                    Text("${v.durationSec} ثانية", fontSize = 11.sp, color = Color(0xFF6A6A7A))
+
+                    Spacer(Modifier.height(16.dp))
+
+                    GradientButton(
+                        text = "تحميل بدون علامة مائية",
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Downloader.enqueue(context, v.urlNoWatermark, v.author, v.id)
+                        Toast.makeText(context, "بدأ التحميل ✅", Toast.LENGTH_SHORT).show()
+                    }
+
+                    v.urlHd?.let { hd ->
+                        Spacer(Modifier.height(9.dp))
+                        GradientButton(
+                            text = "تحميل جودة HD",
+                            filled = false,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Downloader.enqueue(context, hd, v.author, "${v.id}_HD")
+                            Toast.makeText(context, "بدأ تحميل HD ✅", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+
+                    v.urlMusic?.let { mp3 ->
+                        Spacer(Modifier.height(9.dp))
+                        GradientButton(
+                            text = "تحميل الصوت MP3",
+                            filled = false,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Downloader.enqueue(context, mp3, v.author, v.id, isAudio = true)
+                            Toast.makeText(context, "بدأ تحميل الصوت ✅", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
                     Text(
-                        it,
-                        color = Color(0xFFFF8FA3),
-                        modifier = Modifier.padding(14.dp)
+                        "الملفات بتتحفظ في Movies/TikDown",
+                        fontSize = 11.sp,
+                        color = Color(0xFF5E5E70)
                     )
                 }
             }
-
-            info?.let { v ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(Modifier.padding(14.dp)) {
-                        AsyncImage(
-                            model = v.cover,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Text("@${v.author}", color = MaterialTheme.colorScheme.secondary, fontSize = 14.sp)
-                        Spacer(Modifier.height(4.dp))
-                        Text(v.title, fontSize = 15.sp, maxLines = 3)
-                        Spacer(Modifier.height(6.dp))
-                        Text("${v.durationSec} ثانية", fontSize = 12.sp, color = Color.Gray)
-
-                        Spacer(Modifier.height(14.dp))
-
-                        Button(
-                            onClick = {
-                                Downloader.enqueue(context, v.urlNoWatermark, v.author, v.id)
-                                Toast.makeText(context, "بدأ التحميل ✅", Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("تحميل بدون علامة مائية") }
-
-                        v.urlHd?.let { hd ->
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedButton(
-                                onClick = {
-                                    Downloader.enqueue(context, hd, v.author, "${v.id}_HD")
-                                    Toast.makeText(context, "بدأ تحميل HD ✅", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("تحميل جودة HD") }
-                        }
-
-                        v.urlMusic?.let { mp3 ->
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedButton(
-                                onClick = {
-                                    Downloader.enqueue(context, mp3, v.author, v.id, isAudio = true)
-                                    Toast.makeText(context, "بدأ تحميل الصوت ✅", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("تحميل الصوت MP3") }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "الملفات بتتحفظ في Movies/TikDown",
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
-            }
         }
+
+        Spacer(Modifier.height(40.dp))
+
+        // ===== الحقوق =====
+        Box(
+            Modifier
+                .fillMaxWidth(0.5f)
+                .height(1.dp)
+                .background(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFF33333F), Color.Transparent)))
+        )
+        Spacer(Modifier.height(16.dp))
+        Text("تطوير وبرمجة", fontSize = 11.sp, color = Color(0xFF5E5E70))
+        Spacer(Modifier.height(3.dp))
+        Text(
+            DEV_NAME,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Black,
+            style = TextStyle(brush = BrandBrush)
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "© 2026  ·  v$APP_VERSION  ·  جميع الحقوق محفوظة",
+            fontSize = 10.sp,
+            color = Color(0xFF44444F),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(10.dp))
     }
 }
