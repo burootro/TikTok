@@ -7,13 +7,16 @@
     <application
         android:allowBackup="true"
         android:label="TikDown"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+        android:theme="@style/Theme.TikDown">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTask">
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.TikDown">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
