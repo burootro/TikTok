@@ -41,17 +41,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// ====== غيّر اسمك من هنا بس ======
 const val DEV_NAME = "AHMED"
-const val APP_VERSION = "1.0"
-// =================================
 
 val Pink = Color(0xFFFF2D55)
 val Cyan = Color(0xFF25F4EE)
@@ -122,7 +119,6 @@ fun AppRoot(incomingLink: MutableState<String>) {
     }
 }
 
-/** هالة لونية بتتنفّس في خلفية التطبيق */
 @Composable
 fun AnimatedGlow() {
     val t = rememberInfiniteTransition(label = "glow")
@@ -212,6 +208,7 @@ fun GradientButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     filled: Boolean = true,
+    small: Boolean = false,
     onClick: () -> Unit
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -225,12 +222,12 @@ fun GradientButton(
     Box(
         modifier = modifier
             .scale(scale)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
             .then(
                 if (filled && enabled) Modifier.background(BrandBrush)
                 else Modifier
                     .background(Color(0xFF16161E))
-                    .border(1.dp, Color(0xFF33333F), RoundedCornerShape(16.dp))
+                    .border(1.dp, Color(0xFF33333F), RoundedCornerShape(14.dp))
             )
             .alpha(if (enabled) 1f else 0.45f)
             .clickable(
@@ -238,14 +235,14 @@ fun GradientButton(
                 indication = null,
                 enabled = enabled
             ) { onClick() }
-            .padding(vertical = 15.dp, horizontal = 22.dp),
+            .padding(vertical = if (small) 11.dp else 15.dp, horizontal = 18.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text,
             color = if (filled) Color.White else Cyan,
             fontWeight = FontWeight.Bold,
-            fontSize = 15.sp
+            fontSize = if (small) 13.sp else 15.sp
         )
     }
 }
@@ -262,7 +259,7 @@ fun LoadingPulse() {
         Image(
             painter = painterResource(R.drawable.ic_logo),
             contentDescription = null,
-            modifier = Modifier.size(58.dp).scale(s)
+            modifier = Modifier.size(52.dp).scale(s)
         )
         Spacer(Modifier.height(12.dp))
         Text("بجيب الفيديو...", color = Color(0xFF9A9AAB), fontSize = 13.sp)
@@ -275,7 +272,6 @@ fun LoadingPulse() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DownloaderScreen(incomingLink: MutableState<String>) {
     val context = LocalContext.current
@@ -286,23 +282,48 @@ fun DownloaderScreen(incomingLink: MutableState<String>) {
     var info by remember { mutableStateOf<VideoInfo?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    var downloading by remember { mutableStateOf(false) }
+    var progress by remember { mutableFloatStateOf(0f) }
+    var savedPath by remember { mutableStateOf<String?>(null) }
+
     val notifPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
+    val storagePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= 33) {
             notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (Build.VERSION.SDK_INT <= 28) {
+            storagePermission.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
     }
 
     fun load(url: String) {
         if (url.isBlank()) return
         scope.launch {
-            loading = true; error = null; info = null
+            loading = true; error = null; info = null; savedPath = null
             TikTokRepo.fetch(url)
                 .onSuccess { info = it }
                 .onFailure { error = it.message }
             loading = false
+        }
+    }
+
+    fun startDownload(url: String, author: String, id: String, isAudio: Boolean) {
+        if (downloading) return
+        scope.launch {
+            downloading = true; progress = 0f; savedPath = null; error = null
+            Downloader.download(context, url, author, id, isAudio) { p -> progress = p }
+                .onSuccess {
+                    savedPath = it
+                    Toast.makeText(context, "اتحفظ في $it ✅", Toast.LENGTH_LONG).show()
+                }
+                .onFailure { error = it.message }
+            downloading = false
         }
     }
 
@@ -319,10 +340,9 @@ fun DownloaderScreen(incomingLink: MutableState<String>) {
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 18.dp)
-            .padding(top = 40.dp, bottom = 24.dp),
+            .padding(top = 44.dp, bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // الهيدر
         Row(verticalAlignment = Alignment.CenterVertically) {
             Image(
                 painter = painterResource(R.drawable.ic_logo),
@@ -339,11 +359,7 @@ fun DownloaderScreen(incomingLink: MutableState<String>) {
         }
 
         Spacer(Modifier.height(6.dp))
-        Text(
-            "حمّل أي فيديو بدون علامة مائية",
-            fontSize = 12.sp,
-            color = Color(0xFF77778A)
-        )
+        Text("حمّل أي فيديو بدون علامة مائية", fontSize = 12.sp, color = Color(0xFF77778A))
 
         Spacer(Modifier.height(28.dp))
 
@@ -367,15 +383,8 @@ fun DownloaderScreen(incomingLink: MutableState<String>) {
 
         Spacer(Modifier.height(14.dp))
 
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            GradientButton(
-                text = "لصق",
-                filled = false,
-                modifier = Modifier.weight(1f)
-            ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            GradientButton(text = "لصق", filled = false, modifier = Modifier.weight(1f)) {
                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val txt = cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
                 val found = TikTokRepo.extractUrl(txt)
@@ -390,7 +399,7 @@ fun DownloaderScreen(incomingLink: MutableState<String>) {
             ) { load(link) }
         }
 
-        Spacer(Modifier.height(26.dp))
+        Spacer(Modifier.height(24.dp))
 
         AnimatedVisibility(visible = loading, enter = fadeIn(), exit = fadeOut()) {
             LoadingPulse()
@@ -409,7 +418,7 @@ fun DownloaderScreen(incomingLink: MutableState<String>) {
                     .border(1.dp, Color(0xFF5C1E2E), RoundedCornerShape(14.dp))
                     .padding(16.dp)
             ) {
-                Text(error ?: "", color = Color(0xFFFF8FA3), fontSize = 14.sp)
+                Text(error ?: "", color = Color(0xFFFF8FA3), fontSize = 13.sp)
             }
         }
 
@@ -425,96 +434,93 @@ fun DownloaderScreen(incomingLink: MutableState<String>) {
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(22.dp))
+                        .clip(RoundedCornerShape(20.dp))
                         .background(CardBg)
-                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(22.dp))
-                        .padding(16.dp)
+                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(20.dp))
+                        .padding(14.dp)
                 ) {
-                    AsyncImage(
-                        model = v.cover,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(230.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("@${v.author}", color = Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(5.dp))
-                    Text(v.title, fontSize = 14.sp, maxLines = 3, color = Color(0xFFDDDDE6))
-                    Spacer(Modifier.height(6.dp))
-                    Text("${v.durationSec} ثانية", fontSize = 11.sp, color = Color(0xFF6A6A7A))
-
-                    Spacer(Modifier.height(16.dp))
-
-                    GradientButton(
-                        text = "تحميل بدون علامة مائية",
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Downloader.enqueue(context, v.urlNoWatermark, v.author, v.id)
-                        Toast.makeText(context, "بدأ التحميل ✅", Toast.LENGTH_SHORT).show()
-                    }
-
-                    v.urlHd?.let { hd ->
-                        Spacer(Modifier.height(9.dp))
-                        GradientButton(
-                            text = "تحميل جودة HD",
-                            filled = false,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Downloader.enqueue(context, hd, v.author, "${v.id}_HD")
-                            Toast.makeText(context, "بدأ تحميل HD ✅", Toast.LENGTH_SHORT).show()
+                    // معاينة صغيرة جنب البيانات
+                    Row(verticalAlignment = Alignment.Top) {
+                        AsyncImage(
+                            model = v.cover,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(width = 78.dp, height = 104.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "@${v.author}",
+                                color = Cyan,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                v.title,
+                                fontSize = 12.sp,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                                color = Color(0xFFCFCFDA),
+                                lineHeight = 17.sp
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text("${v.durationSec} ثانية", fontSize = 11.sp, color = Color(0xFF6A6A7A))
                         }
                     }
 
-                    v.urlMusic?.let { mp3 ->
-                        Spacer(Modifier.height(9.dp))
+                    Spacer(Modifier.height(14.dp))
+
+                    if (downloading) {
+                        Text(
+                            "جاري التحميل  ${(progress * 100).toInt()}%",
+                            fontSize = 12.sp,
+                            color = Cyan
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)),
+                            color = Pink,
+                            trackColor = Color(0xFF23232E)
+                        )
+                    } else {
                         GradientButton(
-                            text = "تحميل الصوت MP3",
-                            filled = false,
+                            text = "تحميل بدون علامة مائية",
                             modifier = Modifier.fillMaxWidth()
+                        ) { startDownload(v.urlNoWatermark, v.author, v.id, false) }
+
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 9.dp),
+                            horizontalArrangement = Arrangement.spacedBy(9.dp)
                         ) {
-                            Downloader.enqueue(context, mp3, v.author, v.id, isAudio = true)
-                            Toast.makeText(context, "بدأ تحميل الصوت ✅", Toast.LENGTH_SHORT).show()
+                            v.urlHd?.let { hd ->
+                                GradientButton(
+                                    text = "HD",
+                                    filled = false,
+                                    small = true,
+                                    modifier = Modifier.weight(1f)
+                                ) { startDownload(hd, v.author, "${v.id}_HD", false) }
+                            }
+                            v.urlMusic?.let { mp3 ->
+                                GradientButton(
+                                    text = "صوت MP3",
+                                    filled = false,
+                                    small = true,
+                                    modifier = Modifier.weight(1f)
+                                ) { startDownload(mp3, v.author, v.id, true) }
+                            }
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "الملفات بتتحفظ في Movies/TikDown",
-                        fontSize = 11.sp,
-                        color = Color(0xFF5E5E70)
-                    )
+                    savedPath?.let {
+                        Spacer(Modifier.height(12.dp))
+                        Text("✅ اتحفظ في: $it", fontSize = 11.sp, color = Color(0xFF6BD98F))
+                    }
                 }
             }
         }
-
-        Spacer(Modifier.height(40.dp))
-
-        // ===== الحقوق =====
-        Box(
-            Modifier
-                .fillMaxWidth(0.5f)
-                .height(1.dp)
-                .background(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFF33333F), Color.Transparent)))
-        )
-        Spacer(Modifier.height(16.dp))
-        Text("تطوير وبرمجة", fontSize = 11.sp, color = Color(0xFF5E5E70))
-        Spacer(Modifier.height(3.dp))
-        Text(
-            DEV_NAME,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Black,
-            style = TextStyle(brush = BrandBrush)
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "© 2026  ·  v$APP_VERSION  ·  جميع الحقوق محفوظة",
-            fontSize = 10.sp,
-            color = Color(0xFF44444F),
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(10.dp))
     }
 }
