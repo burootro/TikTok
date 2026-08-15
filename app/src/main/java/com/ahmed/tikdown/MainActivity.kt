@@ -52,6 +52,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 const val DEV_NAME = "AHMED"
+const val TELEGRAM = "@pro90qq"
 
 val Pink = Color(0xFFFF2D55)
 val Cyan = Color(0xFF25F4EE)
@@ -121,7 +122,7 @@ fun AppRoot(incomingLink: MutableState<String>, openUpdate: MutableState<Boolean
                 visible = !showSplash,
                 enter = fadeIn(tween(600)) + slideInVertically(tween(600)) { it / 8 }
             ) {
-                DownloaderScreen(incomingLink, manualCheck)
+                MainScaffold(incomingLink, manualCheck)
             }
 
             if (!showSplash) UpdateGate(forceOpen = openUpdate.value, manualCheck = manualCheck)
@@ -283,7 +284,130 @@ fun LoadingPulse() {
 }
 
 @Composable
-fun HistoryDialog(onClose: () -> Unit, onChanged: () -> Unit) {
+fun DrawerRow(
+    title: String,
+    subtitle: String,
+    accent: Color = Cyan,
+    onClick: (() -> Unit)? = null
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .background(Color(0xFF12121A))
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(4.dp, 30.dp)
+                .clip(RoundedCornerShape(50))
+                .background(accent)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE8E8F0))
+            Spacer(Modifier.height(2.dp))
+            Text(subtitle, fontSize = 11.sp, color = Color(0xFF6A6A7A))
+        }
+    }
+}
+
+@Composable
+fun SideDrawer(
+    historyCount: Int,
+    onHistory: () -> Unit,
+    onCheckUpdate: () -> Unit,
+    onClose: () -> Unit
+) {
+    val context = LocalContext.current
+
+    ModalDrawerSheet(
+        drawerContainerColor = CardBg,
+        drawerContentColor = Color(0xFFEDEDED),
+        modifier = Modifier.width(300.dp)
+    ) {
+        Column(Modifier.fillMaxSize().padding(18.dp)) {
+
+            Spacer(Modifier.height(24.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = painterResource(R.drawable.ic_logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(46.dp)
+                )
+                Spacer(Modifier.width(11.dp))
+                Column {
+                    Text(
+                        "TikDown",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        style = TextStyle(brush = BrandBrush)
+                    )
+                    Text("by $DEV_NAME", fontSize = 11.sp, color = Color(0xFF6A6A7A))
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0xFF262633))
+            )
+            Spacer(Modifier.height(18.dp))
+
+            DrawerRow(
+                title = if (historyCount > 0) "سجل التحميلات ($historyCount)" else "سجل التحميلات",
+                subtitle = "كل الفيديوهات اللي نزّلتها",
+                accent = Pink
+            ) {
+                onClose()
+                onHistory()
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            DrawerRow(
+                title = "فحص التحديثات",
+                subtitle = "شوف لو فيه إصدار جديد",
+                accent = Cyan
+            ) {
+                onClose()
+                onCheckUpdate()
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            DrawerRow(
+                title = "تواصل معنا",
+                subtitle = "تليجرام $TELEGRAM",
+                accent = Color(0xFF2AABEE)
+            ) {
+                History.openTelegram(context, TELEGRAM)
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            DrawerRow(
+                title = "الإصدار " + Updater.currentVersion(context),
+                subtitle = "TikDown · جميع الحقوق محفوظة",
+                accent = Color(0xFF44444F)
+            )
+
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+fun HistoryDialog(
+    onClose: () -> Unit,
+    onChanged: () -> Unit,
+    onPlay: (String, String) -> Unit
+) {
     val context = LocalContext.current
     var items by remember { mutableStateOf(History.load(context)) }
     val count = items.size
@@ -309,11 +433,7 @@ fun HistoryDialog(onClose: () -> Unit, onChanged: () -> Unit) {
                     fontWeight = FontWeight.Black,
                     style = TextStyle(brush = BrandBrush)
                 )
-                Text(
-                    count.toString(),
-                    fontSize = 13.sp,
-                    color = Color(0xFF6A6A7A)
-                )
+                Text(count.toString(), fontSize = 13.sp, color = Color(0xFF6A6A7A))
             }
 
             Spacer(Modifier.height(14.dp))
@@ -337,10 +457,11 @@ fun HistoryDialog(onClose: () -> Unit, onChanged: () -> Unit) {
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(Color(0xFF101018))
                                 .clickable {
-                                    if (!History.open(context, h.uri, h.isAudio)) {
-                                        Toast.makeText(
-                                            context, "الملف مش موجود", Toast.LENGTH_SHORT
-                                        ).show()
+                                    if (h.isAudio) {
+                                        History.share(context, h.uri, true)
+                                    } else {
+                                        onClose()
+                                        onPlay(h.uri, h.title)
                                     }
                                 }
                                 .padding(10.dp),
@@ -431,360 +552,14 @@ fun HistoryDialog(onClose: () -> Unit, onChanged: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DownloaderScreen(
+fun MainScaffold(
     incomingLink: MutableState<String>,
     manualCheck: MutableState<Boolean>
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
 
-    var link by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-    var info by remember { mutableStateOf<VideoInfo?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    var downloading by remember { mutableStateOf(false) }
-    var progress by remember { mutableFloatStateOf(0f) }
-    var saved by remember { mutableStateOf<SavedFile?>(null) }
-    var savedIsAudio by remember { mutableStateOf(false) }
-
-    var showHistory by remember { mutableStateOf(false) }
-    var historyCount by remember { mutableIntStateOf(History.load(context).size) }
-
-    val notifPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { }
-    val storagePermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { }
-
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= 33) {
-            notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
-        if (Build.VERSION.SDK_INT <= 28) {
-            storagePermission.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        }
-    }
-
-    fun load(url: String) {
-        if (url.isBlank()) return
-        scope.launch {
-            loading = true; error = null; info = null; saved = null
-            TikTokRepo.fetch(url)
-                .onSuccess { info = it }
-                .onFailure { error = it.message }
-            loading = false
-        }
-    }
-
-    fun startDownload(v: VideoInfo, url: String, idSuffix: String, isAudio: Boolean) {
-        if (downloading) return
-        scope.launch {
-            downloading = true; progress = 0f; saved = null; error = null
-            Downloader.download(context, url, v.author, v.id + idSuffix, isAudio) { p ->
-                progress = p
-            }
-                .onSuccess { sf ->
-                    saved = sf
-                    savedIsAudio = isAudio
-                    History.add(
-                        context,
-                        HistoryItem(
-                            id = v.id + idSuffix + "-" + System.currentTimeMillis(),
-                            title = v.title,
-                            author = v.author,
-                            cover = v.cover,
-                            uri = sf.uri.toString(),
-                            isAudio = isAudio,
-                            time = System.currentTimeMillis()
-                        )
-                    )
-                    historyCount = History.load(context).size
-                    Toast.makeText(context, "اتحفظ في " + sf.folder + " ✅", Toast.LENGTH_SHORT).show()
-                }
-                .onFailure { error = it.message }
-            downloading = false
-        }
-    }
-
-    LaunchedEffect(incomingLink.value) {
-        if (incomingLink.value.isNotBlank()) {
-            link = incomingLink.value
-            load(link)
-            incomingLink.value = ""
-        }
-    }
-
-    if (showHistory) {
-        HistoryDialog(
-            onClose = { showHistory = false },
-            onChanged = { historyCount = History.load(context).size }
-        )
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp)
-            .padding(top = 44.dp, bottom = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Image(
-                painter = painterResource(R.drawable.ic_logo),
-                contentDescription = null,
-                modifier = Modifier.size(42.dp)
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                "TikDown",
-                fontSize = 27.sp,
-                fontWeight = FontWeight.Black,
-                style = TextStyle(brush = BrandBrush)
-            )
-        }
-
-        Spacer(Modifier.height(6.dp))
-        Text("حمّل أي فيديو بدون علامة مائية", fontSize = 12.sp, color = Color(0xFF77778A))
-
-        Spacer(Modifier.height(24.dp))
-
-        OutlinedTextField(
-            value = link,
-            onValueChange = { link = it },
-            label = { Text("الصق رابط التيك توك هنا") },
-            singleLine = false,
-            maxLines = 3,
-            shape = RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Pink,
-                unfocusedBorderColor = Color(0xFF2C2C38),
-                focusedLabelColor = Cyan,
-                cursorColor = Pink,
-                focusedContainerColor = Color(0xFF12121A),
-                unfocusedContainerColor = Color(0xFF12121A)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(Modifier.height(14.dp))
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            GradientButton(text = "لصق", filled = false, modifier = Modifier.weight(1f)) {
-                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val txt = cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
-                val found = TikTokRepo.extractUrl(txt)
-                if (found != null) { link = found; load(found) }
-                else Toast.makeText(context, "مفيش رابط في الكليب بورد", Toast.LENGTH_SHORT).show()
-            }
-
-            GradientButton(
-                text = if (loading) "..." else "جلب الفيديو",
-                enabled = !loading && link.isNotBlank(),
-                modifier = Modifier.weight(1.6f)
-            ) { load(link) }
-        }
-
-        Spacer(Modifier.height(22.dp))
-
-        AnimatedVisibility(visible = loading, enter = fadeIn(), exit = fadeOut()) {
-            LoadingPulse()
-        }
-
-        AnimatedVisibility(
-            visible = error != null,
-            enter = fadeIn(tween(300)) + scaleIn(initialScale = 0.94f),
-            exit = fadeOut()
-        ) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF33131F))
-                    .border(1.dp, Color(0xFF5C1E2E), RoundedCornerShape(14.dp))
-                    .padding(16.dp)
-            ) {
-                Text(error ?: "", color = Color(0xFFFF8FA3), fontSize = 13.sp)
-            }
-        }
-
-        val v = info
-        AnimatedVisibility(
-            visible = v != null,
-            enter = fadeIn(tween(450)) +
-                    slideInVertically(tween(450)) { it / 5 } +
-                    scaleIn(tween(450), initialScale = 0.93f),
-            exit = fadeOut()
-        ) {
-            if (v != null) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(CardBg)
-                        .border(1.dp, Color(0xFF262633), RoundedCornerShape(20.dp))
-                        .padding(14.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.Top) {
-                        AsyncImage(
-                            model = v.cover,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(width = 78.dp, height = 104.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                "@" + v.author,
-                                color = Cyan,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(5.dp))
-                            Text(
-                                v.title,
-                                fontSize = 12.sp,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                                color = Color(0xFFCFCFDA),
-                                lineHeight = 17.sp
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                v.durationSec.toString() + " ثانية",
-                                fontSize = 11.sp,
-                                color = Color(0xFF6A6A7A)
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(14.dp))
-
-                    val percent = (progress * 100).toInt()
-
-                    when {
-                        downloading -> {
-                            Text(
-                                "جاري التحميل  " + percent + "%",
-                                fontSize = 12.sp,
-                                color = Cyan
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = { progress },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(50)),
-                                color = Pink,
-                                trackColor = Color(0xFF23232E)
-                            )
-                        }
-
-                        saved != null -> {
-                            val sf = saved!!
-                            Text(
-                                "✅ اتحفظ في " + sf.folder,
-                                fontSize = 11.sp,
-                                color = Color(0xFF6BD98F)
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(9.dp)
-                            ) {
-                                GradientButton(
-                                    text = "فتح",
-                                    small = true,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    if (!History.open(context, sf.uri.toString(), savedIsAudio)) {
-                                        Toast.makeText(
-                                            context, "مفيش تطبيق يفتح الملف", Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                                GradientButton(
-                                    text = "مشاركة",
-                                    filled = false,
-                                    small = true,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    History.share(context, sf.uri.toString(), savedIsAudio)
-                                }
-                            }
-                            Spacer(Modifier.height(9.dp))
-                            GradientButton(
-                                text = "تحميل نسخة تانية",
-                                filled = false,
-                                small = true,
-                                modifier = Modifier.fillMaxWidth()
-                            ) { saved = null }
-                        }
-
-                        else -> {
-                            GradientButton(
-                                text = "تحميل بدون علامة مائية",
-                                modifier = Modifier.fillMaxWidth()
-                            ) { startDownload(v, v.urlNoWatermark, "", false) }
-
-                            Row(
-                                Modifier.fillMaxWidth().padding(top = 9.dp),
-                                horizontalArrangement = Arrangement.spacedBy(9.dp)
-                            ) {
-                                v.urlHd?.let { hd ->
-                                    GradientButton(
-                                        text = "HD",
-                                        filled = false,
-                                        small = true,
-                                        modifier = Modifier.weight(1f)
-                                    ) { startDownload(v, hd, "_HD", false) }
-                                }
-                                v.urlMusic?.let { mp3 ->
-                                    GradientButton(
-                                        text = "صوت MP3",
-                                        filled = false,
-                                        small = true,
-                                        modifier = Modifier.weight(1f)
-                                    ) { startDownload(v, mp3, "_audio", true) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(28.dp))
-
-        val historyLabel = if (historyCount > 0) "السجل (" + historyCount + ")" else "السجل"
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            GradientButton(
-                text = historyLabel,
-                filled = false,
-                small = true,
-                modifier = Modifier.weight(1f)
-            ) { showHistory = true }
-
-            GradientButton(
-                text = "فحص التحديثات",
-                filled = false,
-                small = true,
-                modifier = Modifier.weight(1f)
-            ) { manualCheck.value = true }
-        }
-
-        Spacer(Modifier.height(14.dp))
-        Text(
-            "الإصدار " + Updater.currentVersion(context),
-            fontSize = 10.sp,
-            color = Color(0xFF44444F)
-        )
-    }
-}
+    var showHistory by remember { mutable
